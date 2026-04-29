@@ -9,7 +9,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing fileId or query" });
   }
 
-  const systemPrompt = `Sos un asistente que busca personas en el padrón electoral argentino.
+  try {
+    // Descargar el PDF desde Drive
+    const pdfUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`;
+    const pdfRes = await fetch(pdfUrl);
+    if (!pdfRes.ok) throw new Error(`No se pudo descargar el PDF: ${pdfRes.status}`);
+    
+    const pdfBuffer = await pdfRes.arrayBuffer();
+    const pdfBase64 = Buffer.from(pdfBuffer).toString("base64");
+
+    const systemPrompt = `Sos un asistente que busca personas en el padrón electoral argentino.
 Dado el contenido de un PDF, buscá TODAS las coincidencias para el término indicado.
 Considerá variaciones: orden (apellido nombre / nombre apellido), acentos, mayúsculas/minúsculas.
 Para búsqueda por dirección: devolvé TODOS los registros que viven en esa dirección.
@@ -18,7 +27,6 @@ Respondé SOLO con un JSON array. Cada elemento debe tener:
 Si no hay resultados, devolvé [].
 Sin markdown, sin explicaciones, sin bloques de código. Solo el JSON array.`;
 
-  try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -37,8 +45,9 @@ Sin markdown, sin explicaciones, sin bloques de código. Solo el JSON array.`;
               {
                 type: "document",
                 source: {
-                  type: "url",
-                  url: `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: pdfBase64,
                 },
               },
               {
