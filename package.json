@@ -10,7 +10,7 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "pdf-parse": "^1.1.1"
+    "pdfjs-dist": "^4.4.168"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
