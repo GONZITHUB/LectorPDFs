@@ -38,7 +38,7 @@ Sin markdown, sin explicaciones, sin bloques de código. Solo el JSON array.`;
                 type: "document",
                 source: {
                   type: "url",
-                  url: `https://drive.google.com/uc?export=download&id=${fileId}`,
+                  url: `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,
                 },
               },
               {
