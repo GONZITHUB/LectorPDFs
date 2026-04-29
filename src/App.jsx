@@ -22,8 +22,21 @@ async function searchInFile(fileId, query, searchType) {
   return data.results || [];
 }
 
+function filterFiles(files, localidad) {
+  if (!localidad.trim()) return files;
+  const norm = localidad.trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+  return files.filter(f => {
+    const name = f.name.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return name.includes(norm);
+  });
+}
+
 export default function App() {
   const [query, setQuery] = useState("");
+  const [localidad, setLocalidad] = useState("");
   const [searchType, setSearchType] = useState("nombre");
   const [status, setStatus] = useState("idle");
   const [log, setLog] = useState([]);
@@ -40,16 +53,33 @@ export default function App() {
     setLog([]);
     setResults([]);
     setErrorMsg("");
+
     try {
       addLog("📁 Listando archivos en Google Drive…");
-      const files = await listPDFs();
-      if (!files.length) throw new Error("No se encontraron PDFs en la carpeta.");
-      addLog(`✅ ${files.length} archivo(s) encontrado(s)`);
+      const allFiles = await listPDFs();
+      if (!allFiles.length) throw new Error("No se encontraron PDFs en la carpeta.");
+
+      const files = filterFiles(allFiles, localidad);
+
+      if (!files.length) {
+        throw new Error(`No se encontró ningún archivo para la localidad "${localidad}". Verificá el nombre o dejá el campo vacío para buscar en todos.`);
+      }
+
+      if (localidad.trim()) {
+        addLog(`📍 Localidad: "${localidad}" → ${files.length} archivo(s)`);
+      } else {
+        addLog(`✅ ${files.length} archivo(s) — búsqueda en todos (puede tardar)`);
+      }
+
       const found = [];
+
       for (let i = 0; i < files.length; i++) {
         if (abortRef.current) break;
         const file = files[i];
         addLog(`🔍 Buscando en: ${file.name} (${i + 1}/${files.length})…`);
+
+        if (i > 0) await new Promise(r => setTimeout(r, 2000));
+
         try {
           const matches = await searchInFile(file.id, query, searchType);
           if (matches.length > 0) {
@@ -62,15 +92,18 @@ export default function App() {
           addLog(`  ❌ Error en ${file.name}: ${e.message}`);
         }
       }
+
       setResults(found);
       setStatus("done");
       const total = found.reduce((a, r) => a + r.matches.length, 0);
-      addLog(total ? `\n🎯 ${total} resultado(s) en ${found.length} archivo(s).` : "\n🔎 Sin resultados.");
+      addLog(total
+        ? `\n🎯 ${total} resultado(s) en ${found.length} archivo(s).`
+        : "\n🔎 Sin resultados.");
     } catch (e) {
       setErrorMsg(e.message);
       setStatus("error");
     }
-  }, [query, searchType]);
+  }, [query, localidad, searchType]);
 
   const handleStop = () => {
     abortRef.current = true;
@@ -87,6 +120,7 @@ export default function App() {
         <h1 style={s.title}>Buscador de Padrón</h1>
         <p style={s.subtitle}>Nombre · DNI · Dirección</p>
       </div>
+
       <div style={s.card}>
         <label style={s.label}>🔎 Término de búsqueda</label>
         <input
@@ -97,6 +131,17 @@ export default function App() {
           disabled={status === "loading"}
           onKeyDown={(e) => e.key === "Enter" && status !== "loading" && handleSearch()}
         />
+
+        <label style={s.label}>📍 Localidad <span style={s.optional}>(opcional — dejá vacío para buscar en todas)</span></label>
+        <input
+          style={s.input}
+          placeholder="Resistencia · Charata · Las Breñas…"
+          value={localidad}
+          onChange={(e) => setLocalidad(e.target.value)}
+          disabled={status === "loading"}
+          onKeyDown={(e) => e.key === "Enter" && status !== "loading" && handleSearch()}
+        />
+
         <label style={s.label}>Tipo de búsqueda</label>
         <div style={s.typeRow}>
           {[
@@ -114,6 +159,7 @@ export default function App() {
             </button>
           ))}
         </div>
+
         <div style={s.actionRow}>
           <button
             style={{ ...s.btn, opacity: status === "loading" || !query ? 0.45 : 1 }}
@@ -127,12 +173,15 @@ export default function App() {
           )}
         </div>
       </div>
+
       {log.length > 0 && (
         <div style={s.logBox}>
           {log.map((l, i) => <div key={i} style={s.logLine}>{l}</div>)}
         </div>
       )}
+
       {status === "error" && <div style={s.errorBox}>⚠️ {errorMsg}</div>}
+
       {status === "done" && results.length === 0 && log.length > 0 && (
         <div style={s.emptyBox}>
           <div style={{ fontSize: 36, marginBottom: 10 }}>🔍</div>
@@ -140,6 +189,7 @@ export default function App() {
           <p style={{ fontSize: 13, color: "#666", marginTop: 6 }}>Probá con otra variante.</p>
         </div>
       )}
+
       {results.length > 0 && (
         <div>
           <h2 style={s.resultsTitle}>{totalResults} resultado(s) en {results.length} archivo(s)</h2>
@@ -176,6 +226,7 @@ const s = {
   subtitle: { fontSize: 14, color: "#666", margin: 0 },
   card: { background: "#181818", border: "1px solid #272727", borderRadius: 8, padding: "22px", marginBottom: 18 },
   label: { display: "block", fontSize: 11, fontFamily: "monospace", color: "#b8965a", marginBottom: 7, marginTop: 16, letterSpacing: 0.8, textTransform: "uppercase" },
+  optional: { color: "#555", fontSize: 10, textTransform: "none", letterSpacing: 0 },
   input: { width: "100%", boxSizing: "border-box", background: "#111", border: "1px solid #2e2e2e", borderRadius: 5, padding: "11px 13px", color: "#e2dac8", fontSize: 15, fontFamily: "Georgia, serif", outline: "none" },
   typeRow: { display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" },
   typeBtn: { background: "#111", border: "1px solid #2e2e2e", borderRadius: 5, color: "#777", padding: "8px 14px", fontSize: 13, cursor: "pointer", fontFamily: "Georgia, serif" },
